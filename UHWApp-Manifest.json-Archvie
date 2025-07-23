@@ -1,0 +1,21 @@
+{
+  "name": "Upper Haugh Weather",
+  "short_name": "UH Weather",
+  "description": "Current weather and forecast for Upper Haugh",
+  "start_url": "/weather-frontend/index.html",
+  "display": "standalone",
+  "background_color": "#1e374d",
+  "theme_color": "#1e374d",
+  "icons": [
+    {
+      "src": "/weather-frontend/assets/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/weather-frontend/assets/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upper Haugh Weather</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/home/ffp/weather-frontend/manifest.json" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    :root {
+      --bg: #1e374d;
+      --text: #94fdf8;
+      --card: rgba(30, 55, 77, 0.6);
+      --border: rgba(148, 253, 248, 0.3);
+      --sec: rgba(148, 253, 248, 0.7);
+    }
+    body.amoled-mode {
+      --bg: #000;
+      --text: #fff;
+      --card: rgba(18, 18, 18, 0.7);
+      --border: rgba(255, 255, 255, 0.1);
+      --sec: rgba(255, 255, 255, 0.8);
+    }
+    body {
+      font-family: Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.5s ease, color 0.5s ease;
+    }
+    .weather-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .scrollable-x {
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .scrollable-x::-webkit-scrollbar {
+      display: none;
+    }
+    .progress-bar-container {
+      width: 100%;
+      background: var(--sec);
+      border-radius: 5px;
+      height: 10px;
+      margin-top: 0.5rem;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0;
+      background: gray;
+      transition: width 0.5s, background 0.5s;
+    }
+    .loading-spinner {
+      border: 4px solid rgba(148, 253, 248, 0.3);
+      border-top: 4px solid var(--text);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (min-width: 768px) {
+      #weather-app {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+    }
+    .hourly-time {
+      display: flex;
+      flex-direction: row;
+      gap: 4px;
+      align-items: baseline;
+      font-size: 0.875rem;
+    }
+    .hourly-time .time {
+      font-weight: 600;
+    }
+    .hourly-time .ampm {
+      font-size: 0.75rem;
+      color: #94fdf8cc;
+    }
+    .bar {
+      width: 3px;
+      margin: 0 1px;
+      background: #63b3ed;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <div class="loading-spinner"></div>
+  </div>
+  <div id="error" class="hidden text-red-600 text-center p-4 font-bold">Unable to load weather.</div>
+  <main id="weather-app" class="hidden p-4 w-full">
+    <div class="flex justify-end mb-4">
+      <button id="amoled-toggle" class="bg-gray-700 text-white px-3 py-1 rounded-full transition">
+        <i id="theme-icon" class="fa-regular fa-moon"></i>
+      </button>
+    </div>
+
+    <section class="text-center mb-4">
+      <h1 id="location" class="text-4xl font-bold">Upper Haugh</h1>
+      <p id="current-temp" class="text-6xl my-2">--°C</p>
+      <p id="weather-description" class="text-2xl capitalize">...</p>
+      <p id="feels-like" class="text-gray-300">Feels like: --°C</p>
+    </section>
+
+    <section id="precip-section" class="weather-card hidden">
+      <h2 class="text-xl font-semibold flex items-center">
+        <i class="fa-solid fa-cloud-showers-heavy mr-2"></i>Next Hour Precipitation
+      </h2>
+      <div id="precip-graph" class="w-full h-24 flex items-end"></div>
+      <p id="precip-info" class="text-sm text-gray-300 mt-2 text-center"></p>
+    </section>
+
+    <section class="weather-card mb-4">
+      <h2 class="text-xl font-semibold flex items-center">
+        <i class="fa-solid fa-hourglass-start mr-2"></i>Hourly Forecast
+      </h2>
+      <div id="hourly-forecast" class="flex scrollable-x space-x-2 py-2"></div>
+    </section>
+
+    <section class="weather-card mb-4">
+      <h2 class="text-xl font-semibold flex items-center">
+        <i class="fa-solid fa-calendar-days mr-2"></i>7‑Day Forecast
+      </h2>
+      <div class="flex justify-between text-sm text-gray-300 mb-2 px-3">
+        <span class="w-2/5">Day</span>
+        <span class="w-1/5 text-center">Low</span>
+        <span class="w-1/5 text-center">High</span>
+        <span class="w-1/5 text-right">Rain (Chance)</span>
+      </div>
+      <div id="daily-forecast" class="flex flex-col space-y-2"></div>
+    </section>
+
+    <section class="weather-card flex flex-col items-center mb-4">
+      <h2 class="text-xl font-semibold flex items-center"><i class="fa-solid fa-cloud-rain mr-2"></i>Precipitation</h2>
+      <p id="precip-now" class="text-lg font-medium">-- mm</p>
+      <p id="precip-chance" class="text-sm text-gray-300">Chance: --%</p>
+    </section>
+
+    <section class="weather-card mb-4">
+      <h2 class="text-xl font-semibold flex flex-col items-center"><i class="fa-solid fa-wind mr-2"></i>Wind</h2>
+      <p id="wind-speed" class="text-lg text-center">-- mph</p>
+      <p id="wind-direction" class="text-sm text-gray-300 text-center">Direction: --</p>
+    </section>
+
+    <section class="weather-card flex flex-col items-center mb-4">
+      <h2 class="text-xl font-semibold flex items-center"><i class="fa-solid fa-smog mr-2"></i>Air Quality</h2>
+      <p id="aq-status" class="text-lg font-medium">--</p>
+      <p id="aq-value" class="text-sm text-gray-300">AQI: --</p>
+      <div class="progress-bar-container"><div id="aq-bar" class="progress-bar"></div></div>
+    </section>
+
+     <section class="weather-card flex flex-col items-center mb-4">
+      <h2 class="text-xl font-semibold flex items-center"><i class="fa-solid fa-sun mr-2"></i>UV Index</h2>
+      <p id="uv-value" class="text-lg font-medium">--</p>
+      <p id="uv-status" class="text-sm text-gray-300">--</p>
+      <div class="progress-bar-container"><div id="uv-bar" class="progress-bar"></div></div>
+      <p id="uv-advice" class="text-xs text-gray-300 mt-2"></p>
+    </section>
+
+    <section class="weather-card mb-4">
+      <h2 class="text-xl font-semibold flex items-center"><i class="fa-solid fa-sun-plant-wilt mr-2"></i>Sun & Moon</h2>
+      <div class="flex justify-around mb-4">
+        <div>
+          <h3 class="text-lg font-medium">Sunrise</h3>
+          <p id="sunrise" class="text-gray-300">--</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-medium">Sunset</h3>
+          <p id="sunset" class="text-gray-300">--</p>
+        </div>
+      </div>
+      <hr class="border-gray-500 my-4" />
+      <div class="flex justify-around mb-4">
+        <div>
+          <h3 class="text-lg font-medium">Moonrise</h3>
+          <p id="moon-rise" class="text-gray-300">--</p>
+        </div>
+        <div>
+          <h3 class="text-lg font-medium">Moonset</h3>
+          <p id="moon-set" class="text-gray-300">--</p>
+        </div>
+      </div>
+      <div class="text-center pt-2">
+        <h3 class="text-lg font-medium">Moon Phase</h3>
+        <p id="moon-phase" class="text-gray-300">--</p>
+        <p id="moon-illum" class="text-gray-300">--%</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center text-sm p-4">
+    <p class="font-bold">Upper Haugh Weather</p>
+    <p class="text-xs text-gray-300">
+      Data from Open Weather Map (<a href="https://uhwappapi.adlaidyson.co.uk/weather" class="text-ceil" target="_blank">uhwappapi.adlaidyson.co.uk</a>)
+    </p>
+    <p class="mt-2"><a href="https://adlaidyson.co.uk" class="text-ceil" target="_blank">Made by Adlai Dyson | Fused Frame Photography</a></p>
+  </footer>
+
+<script>
+    const toggle = document.getElementById('amoled-toggle'),
+          icon = document.getElementById('theme-icon');
+
+    function setTheme(val){
+      document.body.classList.toggle('amoled-mode', val);
+      icon.classList.toggle('fa-sun', val);
+      icon.classList.toggle('fa-moon', !val);
+      localStorage.setItem('amoled', val);
+    }
+    toggle.addEventListener('click', () => { setTheme(!document.body.classList.contains('amoled-mode')); });
+    setTheme(localStorage.getItem('amoled') === 'true');
+
+    function formatTime(ts) {
+      const d = new Date(ts * 1000),
+            h = ((d.getHours() + 11) % 12) + 1,
+            m = d.getMinutes(),
+            a = d.getHours() >= 12 ? 'PM' : 'AM';
+      return { time: `${h}:${m.toString().padStart(2, '0')}`, ampm: a };
+    }
+
+    async function fetchWeather() {
+      try {
+        document.getElementById('loading').classList.remove('hidden');
+        const res = await fetch('https://uhwappapi.adlaidyson.co.uk/weather');
+        if(!res.ok) throw 0;
+        const { weather, airPollution } = await res.json(),
+              curr = weather.current;
+
+        document.getElementById('current-temp').textContent = Math.round(curr.temp) + '°C';
+        document.getElementById('weather-description').textContent = curr.weather[0].description;
+        document.getElementById('feels-like').textContent = 'Feels like: ' + Math.round(curr.feels_like) + '°C';
+
+        // Hourly forecast
+        const hr = document.getElementById('hourly-forecast');
+        hr.innerHTML = '';
+        weather.hourly.slice(0, 25).forEach((h, i) => {
+          const timeObj = i === 0 ? {time: 'Now', ampm: ''} : formatTime(h.dt);
+          hr.innerHTML += `
+            <div class="flex flex-col items-center min-w-[60px] p-2">
+              <div class="hourly-time">
+                <span class="time">${timeObj.time}</span>
+                <span class="ampm">${timeObj.ampm}</span>
+              </div>
+              <span class="text-xl mt-1"><i class="fa-solid ${
+                h.weather[0].id < 600 ? 'fa-cloud-showers-heavy' :
+                h.weather[0].id < 700 ? 'fa-snowflake' :
+                h.weather[0].id === 800 ? 'fa-sun' : 'fa-cloud'
+              }"></i></span>
+              <span class="font-medium mt-1">${Math.round(h.temp)}°C</span>
+              ${h.pop ? `<span class="text-xs text-gray-300">${Math.round(h.pop * 100)}%</span>` : ''}
+            </div>`;
+        });
+
+        // Precipitation next hour graph (bar-style)
+        const ps = document.getElementById('precip-section'), nr = weather.hourly[0];
+        if (/Rain|Snow/.test(curr.weather[0].main) && nr) {
+          ps.classList.remove('hidden');
+          const bars = weather.hourly.slice(0, 12).map(h => {
+            const val = (h.rain?.['1h'] || h.snow?.['1h'] || 0);
+            const height = Math.min(100, val * 20); // scale mm to pixels
+            return `<div class="bar" style="height:${height}%"></div>`;
+          }).join('');
+          document.getElementById('precip-graph').innerHTML = bars;
+          const amt = nr.rain?.['1h'] || nr.snow?.['1h'] || 0;
+          document.getElementById('precip-info').textContent = `Expected: ${amt.toFixed(1)} mm`;
+        } else {
+          ps.classList.add('hidden');
+        }
+
+        // Daily forecast
+        const dl = document.getElementById('daily-forecast');
+        dl.innerHTML = '';
+        weather.daily.slice(0, 7).forEach(d => {
+          const dt = new Date(d.dt * 1000);
+          const day = dt.toLocaleDateString(undefined, { weekday: 'long' });
+          const pop = Math.round(d.pop * 100);
+          const icon = d.weather[0].id < 600 ? 'fa-cloud-showers-heavy' :
+                       d.weather[0].id < 700 ? 'fa-snowflake' :
+                       d.weather[0].id === 800 ? 'fa-sun' : 'fa-cloud';
+          dl.innerHTML += `
+            <div class="flex justify-between items-center px-3 py-2 rounded hover:bg-[#14304d] transition-colors">
+              <div class="w-2/5 flex items-center gap-2">
+                <i class="fa-solid ${icon}"></i>
+                <span>${day}</span>
+              </div>
+              <div class="w-1/5 text-center text-sm text-gray-300">${Math.round(d.temp.min)}°</div>
+              <div class="w-1/5 text-center text-sm text-gray-300">${Math.round(d.temp.max)}°</div>
+              <div class="w-1/5 text-right text-sm text-gray-300">${pop > 0 ? pop + '%' : ''}</div>
+            </div>`;
+        });
+
+        // Precipitation now & chance
+        const pn = document.getElementById('precip-now'),
+              pc = document.getElementById('precip-chance'),
+              pop = curr.pop ?? (weather.hourly[0]?.pop ?? 0);
+        const rainNow = curr.rain?.['1h'] ?? 0;
+        const todayTotal = weather.daily[0].rain ?? weather.daily[0].snow ?? 0;
+        pn.textContent = `${todayTotal.toFixed(1)} mm`;
+        pc.textContent = 'Chance: ' + Math.round(pop * 100) + '%';
+
+        // Wind speed and direction (no compass)
+        document.getElementById('wind-speed').textContent = Math.round(curr.wind_speed) + ' mph';
+        document.getElementById('wind-direction').textContent = `Direction: ${degToCompass(curr.wind_deg)}`;
+
+        // Air Quality
+        if(airPollution?.list?.length){
+          const aqi = airPollution.list[0].main.aqi;
+          document.getElementById('aq-value').textContent = `AQI: ${aqi}`;
+          const {status, color} = aqiStatusColor(aqi);
+          document.getElementById('aq-status').textContent = status;
+          const bar = document.getElementById('aq-bar');
+          bar.style.width = (aqi/5*100) + '%';
+          bar.style.backgroundColor = color;
+        }
+
+        // UV Index
+        const uvIndex = Math.round(curr.uvi);
+        document.getElementById('uv-value').textContent = uvIndex;
+        const {status: uvStatus, color: uvColor, advice} = uvStatusColor(uvIndex);
+        document.getElementById('uv-status').textContent = uvStatus;
+        const uvBar = document.getElementById('uv-bar');
+        uvBar.style.width = (Math.min(uvIndex, 11)/11*100) + '%';
+        uvBar.style.backgroundColor = uvColor;
+        document.getElementById('uv-advice').textContent = advice;
+
+        // Sun & Moon times
+        document.getElementById('sunrise').textContent = timeStr(curr.sunrise);
+        document.getElementById('sunset').textContent = timeStr(curr.sunset);
+        document.getElementById('moon-rise').textContent = timeStr(weather.daily[0].moonrise);
+        document.getElementById('moon-set').textContent = timeStr(weather.daily[0].moonset);
+        // Moon phase and illumination
+        const mp = weather.daily[0].moon_phase,
+              illum = Math.round(mp < 0.5 ? mp*200 : (1 - mp)*200);
+        document.getElementById('moon-phase').textContent = moonPhaseName(mp);
+        document.getElementById('moon-illum').textContent = `${illum}% illumination`;
+
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('weather-app').classList.remove('hidden');
+      } catch {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+      }
+    }
+
+    function degToCompass(num) {
+      const val = Math.floor((num / 22.5) + 0.5);
+      const arr = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                   "S","SSW","SW","WSW","W","WNW","NW","NNW"];
+      return arr[(val % 16)];
+    }
+
+    function aqiStatusColor(aqi) {
+      switch(aqi) {
+        case 1: return {status:'Good', color:'#4caf50'};
+        case 2: return {status:'Fair', color:'#ffeb3b'};
+        case 3: return {status:'Moderate', color:'#ff9800'};
+        case 4: return {status:'Poor', color:'#f44336'};
+        case 5: return {status:'Very Poor', color:'#9c27b0'};
+        default: return {status:'Unknown', color:'gray'};
+      }
+    }
+
+    function uvStatusColor(uvi) {
+      if(uvi <= 2) return {status:'Low', color:'#4caf50', advice:'No protection needed.'};
+      if(uvi <= 5) return {status:'Moderate', color:'#ffeb3b', advice:'Seek shade during midday hours.'};
+      if(uvi <= 7) return {status:'High', color:'#ff9800', advice:'Wear protective clothing and sunscreen.'};
+      if(uvi <= 10) return {status:'Very High', color:'#f44336', advice:'Avoid being outside during midday hours.'};
+      return {status:'Extreme', color:'#9c27b0', advice:'Take all precautions; unprotected skin can burn quickly.'};
+    }
+
+    function timeStr(ts) {
+      if(!ts) return '--';
+      const d = new Date(ts * 1000),
+            h = d.getHours(),
+            m = d.getMinutes(),
+            a = h >= 12 ? 'PM' : 'AM',
+            hr12 = ((h + 11) % 12 + 1);
+      return `${hr12}:${m.toString().padStart(2, '0')} ${a}`;
+    }
+
+    function moonPhaseName(phase) {
+      if(phase === 0 || phase === 1) return 'New Moon';
+      if(phase < 0.125) return 'Waxing Crescent';
+      if(phase < 0.25) return 'First Quarter';
+      if(phase < 0.375) return 'Waxing Gibbous';
+      if(phase < 0.5) return 'Full Moon';
+      if(phase < 0.625) return 'Waning Gibbous';
+      if(phase < 0.75) return 'Last Quarter';
+      if(phase < 1) return 'Waning Crescent';
+      return 'New Moon';
+    }
+
+    fetchWeather();
+    setInterval(fetchWeather, 2 * 60 * 1000);
+  </script>
+</body>
+</html>
